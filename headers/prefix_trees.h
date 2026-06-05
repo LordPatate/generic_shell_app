@@ -15,7 +15,7 @@ enum ptree_error_code {
 };
 
 struct node {
-    struct node *children[128];
+    struct node *children[PTREE_NB_CHILDREN];
     void *data;
 };
 
