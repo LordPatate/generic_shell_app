@@ -9,10 +9,11 @@ enum shell_app_error_code init_default_app(struct behavior *app) {
         "If called without arguments, list all possible commands and their summary.\n"
         "Otherwise, print a detailed help about the command specified as first argument."
     );
+    enum shell_app_error_code error_code;
     #define CHECK(REGISTER_CMD) \
-        if (REGISTER_CMD != SHELL_APP_OK) { \
+        if ((error_code = REGISTER_CMD) != SHELL_APP_OK) { \
             ptree_free(&app->_butler); \
-            return SHELL_APP_REGISTER_FAILED; \
+            return error_code; \
         }
     CHECK(register_command(app, "help", "list available commands or help on one", help_details, default_help))
     CHECK(register_command(app, "exit", "exit shell app", "", shell_app_exit))
@@ -29,15 +30,23 @@ enum shell_app_error_code register_command(
 ) {
     struct command *cmd = malloc(sizeof (struct command));
     if (cmd == NULL) {
-        return SHELL_APP_REGISTER_FAILED;
+        return SHELL_APP_ALLOCATION_FAILED;
     }
     cmd->name = name;
     cmd->summary = summary;
     cmd->help = help;
     cmd->callback = callback;
-    if (ptree_push(&app->_butler, name, cmd) != PTREE_OK) {
+    enum ptree_error_code error_code;
+    if ((error_code = ptree_push(&app->_butler, name, cmd)) != PTREE_OK) {
         free(cmd);
-        return SHELL_APP_REGISTER_FAILED;
+        switch (error_code) {
+        case PTREE_INVALID_CHAR:
+            return SHELL_APP_INVALID_CHARACTER;
+        case PTREE_ALLOCATION_FAILED:
+            return SHELL_APP_ALLOCATION_FAILED;
+        default:
+            return SHELL_APP_UNKOWN_ERROR;
+        }
     }
     return SHELL_APP_OK;
 }
