@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "my_string.h"
 #include "prefix_trees.h"
 #include "res_or_err.h"
 
