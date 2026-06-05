@@ -48,9 +48,10 @@ struct command {
     enum app_signal (*callback)(struct behavior *this, char *args);
 };
 
-// Initialize an app with predefined commands "help" and "exit".
 // Provide default on_start() and on_exit() that do nothing.
+// Register predefined commands "help" and "exit".
 // Return an error code in case of failure, SHELL_APP_OK otherwise.
+// Delete all registered commands on failure.
 // Possible errors:
 // - SHELL_APP_ALLOCATION_FAILED
 // - SHELL_APP_UNKOWN_ERROR
