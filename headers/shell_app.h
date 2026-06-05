@@ -32,11 +32,8 @@ struct behavior {
     // --- Public members ---
 
     // Called after start.
-    // The returned pointer will be forwarded as argument to all
-    // callbacks expecting a state.
     void (*on_start)(struct behavior *this);
     // Called before exit.
-    // Best time to free the state pointer.
     void (*on_exit)(struct behavior *this);
 
     // --- Internal members ---
@@ -52,6 +49,7 @@ struct command {
 };
 
 // Initialize an app with predefined commands "help" and "exit".
+// Provide default on_start() and on_exit() that do nothing.
 // Return an error code in case of failure, 0 otherwise.
 enum shell_app_error_code init_default_app(struct behavior *empty_app);
 

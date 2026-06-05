@@ -25,7 +25,7 @@ enum shell_app_error_code register_command(
     char *name,
     char *summary,
     char *help,
-    enum app_signal (*callback)(struct behavior*, char*)
+    enum app_signal (*callback)(struct behavior *this, char *args)
 ) {
     struct command *cmd = malloc(sizeof (struct command));
     if (cmd == NULL) {
