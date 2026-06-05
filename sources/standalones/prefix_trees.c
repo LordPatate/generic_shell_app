@@ -73,4 +73,5 @@ void _ptree_free(struct node *tree) {
 }
 void ptree_free(struct prefix_tree *tree) {
     _ptree_free(tree->root);
+    tree->root = NULL;
 }
