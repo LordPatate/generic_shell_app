@@ -35,7 +35,10 @@ enum shell_app_error_code register_command(
     cmd->summary = summary;
     cmd->help = help;
     cmd->callback = callback;
-    ptree_push(&app->_butler, name, cmd);
+    if (ptree_push(&app->_butler, name, cmd) != PTREE_OK) {
+        free(cmd);
+        return SHELL_APP_REGISTER_FAILED;
+    }
     return SHELL_APP_OK;
 }
 
