@@ -7,10 +7,9 @@ Tiny generic extensible shell application.
 ```
 .
 ├─ binaries
-│  └─ libshell_app.a
+│  └─ libShellApp.a
 ├─ headers
-│  ├─ prefix_trees.h
-│  ├─ res_or_err.h
+│  ├─ ...
 │  └─ shell_app.h
 └─ README.md  (this document)
 ```
@@ -22,12 +21,12 @@ Tiny generic extensible shell application.
 
 void main(void) {
     struct behavior app;
-    enum shell_app_error_code error = init_default_app(&app);
+    enum shell_app_signal error = init_default_app(&app);
     if (error == SHELL_APP_OK) {
         // customize your app behavior by registering custom commands
         // or modifying the default app.on_start() and app.on_exit()
         run_shell_app(&app);
-        free_app(&app);
+        free_app_internals(&app);
     }
 }
 ```
@@ -37,11 +36,12 @@ void main(void) {
 Commands callbacks must have the following signature:
 
 ```c
-enum app_signal callback(struct behavior *this, char *args);
+int (*callback)(struct behavior *this, char **args, size_t argc);
 ```
 
 - `struct behavior *this` is the pointer that was given to `run_shell_app`.
-- `char *args` is a null-terminated string containing the whole command line without the command name (the first word). All space characters (' ') immediately following the command name are skipped.
+- `char **args` is an array containing `argc` null-terminated strings,
+  representing the arguments following the command name.
 - If the function returns `SHELL_APP_EXIT`, the application will exit gracefully.
 
 Callbacks should be registered using `register_command` before `run_shell_app` is called.
@@ -55,30 +55,30 @@ Since the first parameter of commands callbacks is just a pointer expected to po
 
 struct extended_state {
     struct behavior app;
-    int test_value;
+    char test_value;
 };
 
-enum app_signal my_command(struct behavior *app, char *args) {
+int my_command(struct behavior *app, char **args, size_t argc) {
     struct extended_state *this = (void*) app;
-    if (*args) {
-        this->test_value = *args;
+    if (argc >= 1) {
+        this->test_value = *args[0];
     } else {
-        printf("%d\n", this->test_value);
+        printf("%c\n", this->test_value);
     }
-    return SHELL_APP_RUNNING;
+    return SHELL_APP_OK;
 }
 
 void main(void) {
     struct extended_state state;
-    enum shell_app_error_code error = init_default_app(&state.app);
+    enum shell_app_signal error = init_default_app(&state.app);
     if (error == SHELL_APP_OK) {
         char *details = (
-            "Used with an argument, store its first character as an int.\n"
+            "Used with an argument, store its first character.\n"
             "Without arguments, print the stored value."
         );
         register_command(&state.app, "my_command", "set or print character value", details, my_command);
         run_shell_app(&state.app);
-        free_app(&state.app);
+        free_app_internals(&state.app);
     }
 }
 ```
