@@ -1,7 +1,7 @@
 #include "prefix_trees.h"
 
-struct node *_new_leaf(void *data) {
-    struct node *leaf = malloc(sizeof (struct node));
+static struct node *_new_leaf(void *data) {
+    struct node *leaf = malloc(sizeof(struct node));
     if (leaf != NULL) {
         for (int i = 0; i < PTREE_NB_CHILDREN; ++i) {
             leaf->children[i] = NULL;
@@ -12,14 +12,14 @@ struct node *_new_leaf(void *data) {
 }
 
 struct prefix_tree *empty_prefix_tree() {
-    struct prefix_tree *tree = malloc(sizeof (struct prefix_tree));
+    struct prefix_tree *tree = malloc(sizeof(struct prefix_tree));
     if (tree != NULL) {
-        tree->root = _new_leaf(NULL);
+        tree->root = NULL;
     }
     return tree;
 }
 
-struct result_or_error _ptree_push(struct node *tree, char *key, void *data) {
+static struct result_or_error _ptree_push(struct node *tree, char *key, void *data) {
     if (tree == NULL) {
         tree = _new_leaf(NULL);
         if (tree == NULL) {
@@ -46,7 +46,7 @@ enum ptree_error_code ptree_push(struct prefix_tree *tree, char *key, void *data
     }
 }
 
-struct result_or_error _ptree_search(struct node *tree, char *key) {
+static struct result_or_error _ptree_search(struct node *tree, char *key) {
     if (tree == NULL) {
         return ERROR(PTREE_KEY_NOT_FOUND);
     } else {
@@ -62,16 +62,16 @@ struct result_or_error ptree_search(struct prefix_tree *tree, char *key) {
     return _ptree_search(tree->root, key);
 }
 
-void _ptree_free(struct node *tree) {
+static void _free_ptree_node(struct node *tree) {
     if (tree != NULL) {
         for (int i = 0; i < PTREE_NB_CHILDREN; ++i) {
-            _ptree_free(tree->children[i]);
+            _free_ptree_node(tree->children[i]);
         }
         free(tree->data);
         free(tree);
     }
 }
-void ptree_free(struct prefix_tree *tree) {
-    _ptree_free(tree->root);
-    tree->root = NULL;
+void free_ptree(struct prefix_tree *tree) {
+    _free_ptree_node(tree->root);
+    free(tree);
 }

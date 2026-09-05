@@ -1,2 +1,3 @@
-gcc -g -I headers sources/shell_app/shell_app.c sources/standalones/*.c examples/default_app.c  || exit 1
-gdb a.out
+mkdir -p headers
+ln -rsf sources/*/*.h headers
+gcc -fsanitize=address -g -I headers sources/*/*.c examples/default_app/main.c -o debug_default_app  || exit 1

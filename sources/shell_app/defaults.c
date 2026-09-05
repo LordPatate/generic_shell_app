@@ -1,10 +1,10 @@
 #include "shell_app.h"
 
-void _print_cmd_summary(struct command *cmd) {
+static void _print_cmd_summary(struct shell_app_command *cmd) {
     printf("- %s: %s\n", cmd->name, cmd->summary);
 }
 
-void _print_cmd_detail(struct command *cmd) {
+static void _print_cmd_detail(struct shell_app_command *cmd) {
     printf(
         "- %s: %s\n"
         "%s\n",
@@ -12,7 +12,7 @@ void _print_cmd_detail(struct command *cmd) {
     );
 }
 
-void _rec_help(struct node *tree) {
+static void _rec_help(struct node *tree) {
     if (tree != NULL) {
         if (tree->data != NULL)
             _print_cmd_summary(tree->data);
@@ -21,24 +21,28 @@ void _rec_help(struct node *tree) {
     }
 }
 
-enum app_signal default_help(struct behavior *this, char *args) {
-    if (*args) {
-        size_t i = 0;
-        while (args[i] && args[i] != ' ') {++i;}
-        args[i] = 0;
-        struct result_or_error lookup_res = lookup_command(this, args);
-        if (lookup_res.ok) 
-            _print_cmd_detail(lookup_res.result);
-        else
-            display_lookup_error(lookup_res.error, args);
+int default_help(struct behavior *this, char **args, size_t argc) {
+    if (argc > 0) {
+        for (size_t i = 0; i < argc; ++i) {
+            struct result_or_error lookup_res = lookup_command(this, args[i]);
+            if (lookup_res.ok) {
+                if (lookup_res.result) {
+                    _print_cmd_detail(lookup_res.result);
+                } else {
+                    display_error(SHELL_APP_COMMAND_NOT_FOUND);
+                }
+            } else {
+                display_error(lookup_res.error);
+            }
+        }
     } else {
         puts("Available commands:");
-        _rec_help(this->_butler.root);
+        _rec_help(this->_butler->root);
     }
-    return SHELL_APP_RUNNING;
+    return SHELL_APP_OK;
 }
 
-enum app_signal shell_app_exit(struct behavior *_this, char *_args) {
+int shell_app_exit(struct behavior *_this, char **_args, size_t _argc) {
     return SHELL_APP_EXIT;
 }
 

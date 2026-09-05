@@ -1,18 +1,18 @@
 #include "shell_app.h"
 
-#include "defaults.c"
-
-enum shell_app_error_code init_default_app(struct behavior *app) {
+enum shell_app_signal init_default_app(struct behavior *app) {
+    app->_butler = empty_prefix_tree();
+    if (!app->_butler) return SHELL_APP_ALLOCATION_FAILED;
     app->on_start = default_on_start;
     app->on_exit = default_on_exit;
     char *help_details = (
         "If called without arguments, list all possible commands and their summary.\n"
         "Otherwise, print a detailed help about the command specified as first argument."
     );
-    enum shell_app_error_code error_code;
+    int error_code;
     #define CHECK(REGISTER_CMD) \
         if ((error_code = REGISTER_CMD) != SHELL_APP_OK) { \
-            ptree_free(&app->_butler); \
+            free_ptree(app->_butler); \
             return error_code; \
         }
     CHECK(register_command(app, "help", "list available commands or help on one", help_details, default_help))
@@ -21,126 +21,102 @@ enum shell_app_error_code init_default_app(struct behavior *app) {
     return SHELL_APP_OK;
 }
 
-enum shell_app_error_code register_command(
+enum shell_app_signal register_command(
     struct behavior *app,
     char *name,
     char *summary,
     char *help,
-    enum app_signal (*callback)(struct behavior *this, char *args)
+    int (*callback)(struct behavior *this, char **args, size_t argc)
 ) {
-    struct command *cmd = malloc(sizeof (struct command));
+    struct shell_app_command *cmd = malloc(sizeof (struct shell_app_command));
     if (cmd == NULL) {
         return SHELL_APP_ALLOCATION_FAILED;
     }
-    cmd->name = name;
-    cmd->summary = summary;
-    cmd->help = help;
-    cmd->callback = callback;
-    enum ptree_error_code error_code;
-    if ((error_code = ptree_push(&app->_butler, name, cmd)) != PTREE_OK) {
+    *cmd = (struct shell_app_command) {
+        .name = name,
+        .summary = summary,
+        .help = help,
+        .callback = callback,
+    };
+    enum ptree_error_code error_code = ptree_push(app->_butler, name, cmd);
+    if (error_code != PTREE_OK) {
         free(cmd);
-        switch (error_code) {
-        case PTREE_INVALID_CHAR:
-            return SHELL_APP_INVALID_CHARACTER;
-        case PTREE_ALLOCATION_FAILED:
-            return SHELL_APP_ALLOCATION_FAILED;
-        default:
-            return SHELL_APP_UNKOWN_ERROR;
-        }
+        return error_code;
     }
     return SHELL_APP_OK;
 }
 
 struct result_or_error lookup_command(struct behavior *app, char *cmd_name) {
-    struct result_or_error search_res = ptree_search(&app->_butler, cmd_name);
-    if (search_res.ok) {
-        struct command *cmd = search_res.result;
-        if (cmd != NULL)
-            return RESULT(cmd);
-        else
-            return ERROR(SHELL_APP_COMMAND_NOT_FOUND);
-    } else {
-        switch (search_res.error) {
-        case PTREE_INVALID_CHAR:
-            return ERROR(SHELL_APP_INVALID_CHARACTER);
-        case PTREE_KEY_NOT_FOUND:
-            return ERROR(SHELL_APP_COMMAND_NOT_FOUND);
-        default:
-            return ERROR(SHELL_APP_UNKOWN_ERROR);
-        }
-    }
-}
-
-void display_lookup_error(enum shell_app_error_code error, char *cmd) {
-    switch (error) {
-    case SHELL_APP_COMMAND_NOT_FOUND:
-        printf("Unkown command: %s\n", cmd);
-        break;
-    case SHELL_APP_INVALID_CHARACTER:
-        printf("Error: Invalid character in %s\n", cmd);
-        break;
-    default:
-        printf("Unkown error while looking up command %s\n", cmd);
-        break;
-    }
-}
-
-enum shell_app_error_code _readline(char *line_buf, struct _command_line *cmdline) {
-    cmdline->command = line_buf;
-    int i = 0;
-    int c = fgetc(stdin);; // note: int, not char, required to handle EOF
-    while (i < LINE_BUFFER_SIZE - 2 && c != EOF && c != ' ' && c != '\n') {
-        line_buf[i++] = c;
-        c = fgetc(stdin);
-    }
-    line_buf[i++] = 0;
-    cmdline->args = line_buf + i;
-    if (ferror(stdin))
-        return SHELL_APP_INPUT_ERROR;
-    while (c == ' ') {
-        c = fgetc(stdin);
-    }
-    if (ferror(stdin))
-        return SHELL_APP_INPUT_ERROR;
-    while (i < LINE_BUFFER_SIZE - 1 && c != EOF && c != '\n') {
-        line_buf[i++] = c;
-        c = fgetc(stdin);
-    }
-    line_buf[i++] = 0;
-    if (ferror(stdin))
-        return SHELL_APP_INPUT_ERROR;
-    return SHELL_APP_OK;
+    return ptree_search(app->_butler, cmd_name);
 }
 
 void run_shell_app(struct behavior *app) {
-    enum app_signal signal = SHELL_APP_RUNNING;
-    char line[LINE_BUFFER_SIZE];
-    struct _command_line cmdline = {"", ""};
+    int signal = SHELL_APP_OK;
+    struct result_or_error res;
+    struct command_line cmdline;
+    struct shell_app_command *cmd;
+    char *line;
     app->on_start(app);
     while (signal != SHELL_APP_EXIT) {
         fputs("> ", stderr);
-        enum shell_app_error_code read_err = _readline(line, &cmdline);
-        if (read_err != SHELL_APP_OK) {
-            switch (read_err) {
-            case SHELL_APP_INPUT_ERROR:
-                printf("Warning: error while reading: %s\n", strerror(errno));
-                break;
-            default:
-                puts("Unkown error while reading.");
-                continue;
+        res = readline();
+        if (!res.ok) {
+            signal = (res.error == READLINE_END_OF_FILE) ? SHELL_APP_EXIT : res.error;
+            display_error(signal);
+            continue;
+        }
+        line = res.result;
+        signal = parse_command_line(line, &cmdline);
+        if (signal == ARRAY_BUILDER_OK) {
+            if (cmdline.command[0]) {
+                res = lookup_command(app, cmdline.command);
+                if (res.ok) {
+                    cmd = res.result;
+                    if (cmd) {
+                        signal = cmd->callback(app, cmdline.args, cmdline.argc);
+                        if (signal != SHELL_APP_OK) {
+                            display_error(signal);
+                        }
+                    } else {
+                        display_error(SHELL_APP_COMMAND_NOT_FOUND);
+                    }
+                } else {
+                    display_error(res.error);
+                }
             }
-        }
-        struct result_or_error lookup_res = lookup_command(app, cmdline.command);
-        if (lookup_res.ok) {
-            struct command *cmd = lookup_res.result;
-            signal = cmd->callback(app, cmdline.args);
+            free(cmdline.args);
         } else {
-            display_lookup_error(lookup_res.error, cmdline.command);
+            display_error(signal);
         }
+        free(line);
     }
     app->on_exit(app);
 }
 
-void free_app(struct behavior *app) {
-    ptree_free(&app->_butler);
+void display_error(int error) {
+    switch (error) {
+    case SHELL_APP_ALLOCATION_FAILED:
+        puts("Error: Allocation failed");
+        break;
+    case SHELL_APP_INPUT_ERROR:
+        perror("Error reading input");
+        break;
+    case SHELL_APP_COMMAND_NOT_FOUND:
+        puts("Error: Unkown command");
+        break;
+    case SHELL_APP_INVALID_CHARACTER:
+        puts("Error: Invalid character");
+        break;
+    case SHELL_APP_EXIT:
+        puts("Exiting...");
+        break;
+    case SHELL_APP_UNKOWN_ERROR:
+    default:
+        puts("Unkown error");
+        break;
+    }
+}
+
+void free_app_internals(struct behavior *app) {
+    free_ptree(app->_butler);
 }
